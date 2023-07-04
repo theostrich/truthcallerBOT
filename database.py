@@ -2,6 +2,7 @@ import pymongo
 from pyrogram.enums import ChatType
 from config import mongouri
 from datetime import datetime
+import random
 
 client = pymongo.MongoClient(mongouri, connect=False)
 db = client["TruthCaller"]
@@ -9,7 +10,6 @@ collection = {'user': 'usercache', 'group': 'groupcache'}
 
 def today():
   today = int(datetime.utcnow().strftime('%Y%m%d'))
-  print(today)
   return today
 
 def scrape(data):
@@ -121,13 +121,14 @@ def inactive_current(user):
 
 def getID(user):
   acc = getAccounts(user)
-  print(acc)
   if acc:
-    print("hi")
     for i in acc:
       if i["status"] == "active":
          return i['installationID']
   else:
+    consumed = get_consumed(user)
+    if not consumed > 1:
+      return get_id_from_pool()
     return None
     
 def statial(what,how):
@@ -145,7 +146,6 @@ def get_statial():
 def get_today(user):
   collection = db["usercache"]
   r = collection.find_one( {'user_info.id': user})
-  print(r)
   return r['requests']['today']
 
 def add_usage(user):
@@ -161,9 +161,13 @@ def add_usage(user):
 def get_consumed(user):
   collection = db["usercache"]
   r = collection.find_one( {'user_info.id': user})
-  print(f'cons{r}')
   if not r["requests"]["today"] == today():
     return 0
   return r['requests']['consumed']
    
-
+def get_id_from_pool():
+  col = db["defaults"]
+  defaults = col.find_one({})
+  installationID = random.choice(defaults["idPool"])
+  return installationID
+  
