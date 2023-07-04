@@ -9,6 +9,7 @@ import pyromod.listen
 from threading import Thread
 from config import apiID, apiHASH, botTOKEN, truecallerAPI
 import math
+import time 
 
 base = truecallerAPI
 
@@ -191,7 +192,7 @@ async def login(client, message):
     return
   accButton = []
   for i in range(len(accounts)):
-    print(accounts[i])
+
     text = f"{accounts[i]['phone_number']}"
     if accounts[i]["status"] == "active":
       text = text + " ✅"
@@ -298,7 +299,7 @@ async def new_acc(client, message):
       reply_to_message_id=message.id)
     return
   tatus = res['status']
-  print(res)
+
   if (tatus == 2):
     if (res['suspended']):
       await message.reply("**ERROR:** THIS TRUECALLER ACCOUNT IS SUSPENDED",
@@ -371,9 +372,9 @@ async def notjoined(client, user):
 
 @ostrich.on_message(phone_filter)
 async def truth(client, message):
-  #try:
+ try:
   consumed = database.get_consumed(message.chat.id)
-  if consumed > 3 and await notjoined(client, message.chat.id):
+  if consumed > 2 and await notjoined(client, message.chat.id):
     await message.reply_text(
       text=f"**To make more requests, join the channel and try again.**",
       reply_markup=InlineKeyboardMarkup([[
@@ -387,7 +388,7 @@ async def truth(client, message):
   id = database.getID(message.from_user.id)
 
   if not id:
-    await message.reply("Please /login to search",
+    await message.reply("Please /login to continue searching.",
                         reply_markup=InlineKeyboardMarkup([[
                           InlineKeyboardButton("Login", callback_data="login")
                         ]]),
@@ -398,7 +399,7 @@ async def truth(client, message):
     "installationID": id,
   }
   r = requests.post(base + "truth", json=data)
-  print(r.text)
+
   if "status" in json.loads(r.text):
     if (json.loads(r.text)["status"] == 429):
       await message.reply(
@@ -588,10 +589,36 @@ async def truth(client, message):
   database.add_usage(message.chat.id)
 
 
-#except:
+ except:
+   await message.reply("Something went wrong, Contact support")
+
+@ostrich.on_message(filters.command(["broadcast"]))
+async def broadcast(client, message):
+    chat_id = message.chat.id
+    botOwnerID = [1775541139, 1520625615]
+    if chat_id in botOwnerID:
+        await message.reply_text("Broadcasting...")
+        collection = database.db["usercache"]
+        chat = collection.find({})
+        chats = [sub['user_info']['id'] for sub in chat]
+        failed = 0
+        for chat in chats:
+            try:
+                await message.reply_to_message.forward(chat)
+                print("broadcasting")
+                time.sleep(2)
+            except:
+                failed += 1
+                print("Couldn't send broadcast to %s, group name %s", chat)
+        await message.reply_text(
+            "Broadcast complete. {} users failed to receive the message, probably due to being kicked."
+            .format(failed))
+    else:
+        await client.send_message(
+            1520625615, f"Someone tried to access broadcast command,{chat_id}")
 
 
-#  await message.reply("Something went wrong, Contact support")
+ 
 @ostrich.on_message()
 async def mesm(client, message):
   await message.reply(
