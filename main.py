@@ -3,7 +3,7 @@ from pyrogram import Client, filters
 import database
 from alive import run
 import requests
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
 from pyrogram.enums import MessageEntityType
 import pyromod.listen
 from threading import Thread
@@ -12,19 +12,15 @@ import math
 import time 
 
 base = truecallerAPI
-
 ostrich = Client("bot", api_id=apiID, api_hash=apiHASH, bot_token=botTOKEN)
 
-
-async def func(_, __, m):
-  if m.entities:
-    for entity in m.entities:
-      if entity.type == MessageEntityType.PHONE_NUMBER:
-        return True
+async def ph_match(_, __, m):
+  number = get_text_number(m)
+  if number:
+      return True
   return False
-
-
-phone_filter = filters.create(func)
+  
+phone_filter = filters.create(ph_match)
 
 
 @ostrich.on_message(filters.command(["stats"]))
@@ -47,7 +43,7 @@ async def start(client, message):
 **Hi {message.from_user.mention}!**
 I am TruthCaller bot - an unofficial truecaller bot.
 
-Send me any phone number in international format to get its information.
+Send me any mobile number in international format to get its information.
 
 **Ex:** `+911234567890`
 	''',
@@ -67,7 +63,7 @@ async def help(client, message):
 Here is a detailed guide to use me.
 You can use me to get information of unknown mobile numbers.
 
-Send any number in international format with spaces to search.
+Send any mobile number in international format with spaces to search.
 **Ex:** `+911234567890`
 
 **Available Commands:**
@@ -92,15 +88,14 @@ Send any number in international format with spaces to search.
                            reply_to_message_id=message.id)
 
 
-def get_text_number(text, entities):
+def get_text_number(message):
   number = None
-  for entity in entities:
+  if message.entities:
+   for entity in message.entities:
     if entity.type == MessageEntityType.PHONE_NUMBER:
-      number = text[entity.offset:entity.offset + entity.length].replace(
+      number = message.text[entity.offset:entity.offset + entity.length].replace(
         " ", "")
-
       break
-
   return number
 
 
@@ -213,41 +208,37 @@ async def login(client, message):
 async def new_acc(client, message):
   d = database.getAccounts(message.from_user.id)
   ask_phone = await message.chat.ask(
-    "Please send your phone number in international format (with no space).\n\n**Ex:** `+911234567890`",
-    reply_to_message_id=message.id)
+    "Please send your mobile number in international format (with no space).\n\n**Ex:** `+911234567890`",
+    reply_to_message_id=message.id,reply_markup=ForceReply())
 
   try:
-    phone = get_text_number(ask_phone.text, ask_phone.entities)
+    phone = get_text_number(ask_phone)
   except:
     await message.reply(
-      "Invalid phone number. Please enter your number in international format (with no space).\n\n**Ex:** `+911234567890`",
+      "Invalid mobile number. Please enter your mobile number in international format (with no space).\n\n**Ex:** `+911234567890`",
       reply_markup=InlineKeyboardMarkup(
         [[InlineKeyboardButton("Login", callback_data="login")]]),
-      reply_to_message_id=message.id)
+      reply_to_message_id=ask_phone.id)
     return
   if not phone or not phone.startswith("+"):
     await message.reply(
-      "Invalid phone number. Please enter your number in international format (with no space).\n\n**Ex:** `+911234567890`",
+      "Invalid mobile number. Please enter your mobile number in international format (with no space).\n\n**Ex:** `+911234567890`",
       reply_markup=InlineKeyboardMarkup(
         [[InlineKeyboardButton("Login", callback_data="login")]]),
-      reply_to_message_id=message.id)
+      reply_to_message_id=ask_phone.id)
     return
   if phone == "+911234567890":
     await message.reply(
-      "This number is given as an example to guide users.\nUse your own phone number to login.\n\n**Format:** __+(country_code)(phone_number)__\n**Ex:** `+911234567890`\n\nStill have doubt?\nContact @ostrichdiscussion for help.",
+      "This mobile number is given as an example to guide users.\nUse your own mobile number to login.\n\n**Format:** __+(country_code)(mobile_number)__\n**Ex:** `+911234567890`\n\nStill have doubt?\nContact @ostrichdiscussion for help.",
       reply_markup=InlineKeyboardMarkup(
         [[InlineKeyboardButton("Login", callback_data="login")]]),
       reply_to_message_id=message.id)
     return
   if d:
-    for acc in d:
-      if phone == acc["phone_number"]:
-        await message.reply(
-          "This number is already in use by you.\nUse /logout to remove this account and try again.",
-          reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("Logout", callback_data="logout")]]),
-          reply_to_message_id=message.id)
-        return
+    for i in range(len(d)):
+      acc = d[i]
+      if phone ==  acc["phone_number"]:
+        database.rm_account( message.chat.id, i)
 
   data1 = {"number": phone}
 
@@ -263,7 +254,7 @@ async def new_acc(client, message):
     json_data = json.loads(r1.text)
   except:
     await message.reply(
-      "Got unknown response from truecaller.\nContact support @ostrichdiscussion",
+      "Got unknown response from truecaller.\nContact support @ostrichdiscussion or try again later.",
       reply_markup=InlineKeyboardMarkup(
         [[InlineKeyboardButton("Ask Help", url="t.me/ostrichdiscussion")]]),
       reply_to_message_id=message.id)
@@ -271,40 +262,51 @@ async def new_acc(client, message):
 
   status = json_data['status']
   if (status == 1 or status == 9):
-    otp = await message.chat.ask(
-      "Send the 6 digit otp sent to your mobile number",
-      reply_to_message_id=ask_phone.id)
+    process_completed = False
+    text = "Send me the 6 digit otp code sent to your mobile number\nOTP is valid for 5 minutes."
+    while not process_completed:
+      otp = await message.chat.ask(text, reply_to_message_id=ask_phone.id, 
+      reply_markup=ForceReply())
+
+      data2 = {"number": phone, "json_data": json_data, "otp": otp.text}
+      print(process_completed)
+      process_completed = await verify_otp(message, data2,json_data,phone,otp)
+      text = "**ERROR:**\n WRONG OR INVALID OTP. SEND ME THE OTP AGAIN."
+  
   elif (status == 6 or status == 5):
     await message.reply(
-      "**ERROR:**\nVERIFICATION ATTEMPTS EXCEEDED. TRY AGAIN LATER. ",
+      "**ERROR:**\nVERIFICATION ATTEMPTS EXCEEDED. TRY AGAIN LATER.",
       reply_to_message_id=message.id)
     return
   else:
     await message.reply(
-      "**ERROR:**\nUNKNOWN RESPONSE CONTACT SUPPORT @osrrichdiscussion",
+      "**ERROR:**\nUNKNOWN RESPONSE CONTACT SUPPORT @ostrichdiscussion or try again later.",
       reply_to_message_id=message.id)
 
     return
 
-  data2 = {"number": phone, "json_data": json_data, "otp": otp.text}
 
+async def verify_otp(message, data2,json_data,phone,otp):
+  process_completed = False
   r2 = requests.post(base + "loginOTP", json=data2)
   try:
     res = json.loads(r2.text)
   except:
     await message.reply(
-      "Got unknown response from truecaller.\nContact support @ostrichdiscussion",
+      "Got unknown response from truecaller.\nContact support @ostrichdiscussion or try again later.",
       reply_markup=InlineKeyboardMarkup(
-        [[InlineKeyboardButton("Ask Help", url="t.me/ostrichdiscussion")]]),
+        [[InlineKeyboardButton("Get Help", url="t.me/ostrichdiscussion")]]),
       reply_to_message_id=message.id)
-    return
+    process_completed = True
+    return process_completed 
   tatus = res['status']
-
   if (tatus == 2):
     if (res['suspended']):
-      await message.reply("**ERROR:** THIS TRUECALLER ACCOUNT IS SUSPENDED",
-                          reply_to_message_id=message.id)
-      return
+      await message.reply("**ERROR:** THIS TRUECALLER ACCOUNT IS SUSPENDED\n\nUse some other mobile number to login.",
+                          reply_to_message_id=message.id,reply_markup=InlineKeyboardMarkup(
+        [[InlineKeyboardButton("Login", callback_data="login")]]))
+      process_completed = True
+      return process_completed
     database.inactive_current(message.chat.id)
     account = {
       "phone_number": phone,
@@ -315,22 +317,23 @@ async def new_acc(client, message):
       "status": "active"
     }
     database.add_account(message.from_user.id, account)
-
     await message.reply(
-      "Logged in successfully. Now send me the number to search (with no spaces).\n**Ex:** `+911234567890`",
+      "Logged in successfully. Now send me any mobile number to search (with no spaces).\n**Ex:** `+911234567890`",
       reply_to_message_id=otp.id)
+    process_completed = True
   elif (tatus == 11):
-    await message.reply("**ERROR:**\n INVALID OTP", reply_to_message_id=otp.id)
-    return
+    print("Invalid otp")
   elif (tatus == 7):
-    await message.reply("**ERROR:**\n RETRIES LIMIT EXCEED",
-                        reply_to_message_id=otp.id)
-    return
-
+    await message.reply("**ERROR:**\n RETRIES LIMIT EXCEED.\n\nYou can login again later.", reply_to_message_id=otp.id)
+    process_completed = True
   else:
     await message.reply(
-      "**ERROR:**\nUNKNOWN RESPONSE CONTACT SUPPORT @osrrichdiscussion",
-      reply_to_message_id=otp.id)
+      "**ERROR:**\nUNKNOWN RESPONSE CONTACT SUPPORT @ostrichdiscussion",
+      reply_to_message_id=otp.id, reply_markup=InlineKeyboardMarkup(
+        [[InlineKeyboardButton("Get Help", url="t.me/ostrichdiscussion")]]))
+    process_completed = True
+
+  return process_completed
 
 
 @ostrich.on_callback_query()
@@ -376,14 +379,18 @@ async def truth(client, message):
   consumed = database.get_consumed(message.chat.id)
   if consumed > 2 and await notjoined(client, message.chat.id):
     await message.reply_text(
-      text=f"**To make more requests, join the channel and try again.**",
+      text="**To make more requests, join the channel and try again.**",
       reply_markup=InlineKeyboardMarkup([[
         InlineKeyboardButton(text="Join theostrich",
                              url="https://t.me/theostrich")
       ]]))
     return
 
-  phone = get_text_number(message.text, message.entities)
+  phone = get_text_number(message).replace(" ", "")
+  if not phone.startswith("+"):
+    await message.reply(
+      "Invalid phone number. Please enter your number in international format (with no space).\n\n**Ex:** `+911234567890`")
+    return
 
   id = database.getID(message.from_user.id)
 
@@ -398,6 +405,8 @@ async def truth(client, message):
     "number": phone,
     "installationID": id,
   }
+  print(data)
+  requests.get(base)
   r = requests.post(base + "truth", json=data)
 
   if "status" in json.loads(r.text):
@@ -406,12 +415,25 @@ async def truth(client, message):
         "Too many requests, Try again later or use other account")
       return
     if (json.loads(r.text)['status'] == 401):
-      await message.reply(
-        "**Error:**\nUnauthorised. Try using different account or logout and login again."
-      )
-
+      await message.reply( "**Error:** Unauthorised.\n\nThis happens if you logged in some other app. You can login again to continue searching. ",reply_markup=InlineKeyboardMarkup( [[
+                          InlineKeyboardButton("Login", callback_data="login")
+                        ]]
+      ) ,reply_to_message_id=message.id)
+      database.remove_id(message.chat.id,id)
+      return
+    if (json.loads(r.text)['status'] == 426):
+      print("426 user")
+      await message.reply( "**Error:** Unauthorised.\n\nUse some other number to login. ",reply_markup=InlineKeyboardMarkup( [[
+                          InlineKeyboardButton("Login", callback_data="login")
+                        ]]
+      ) ,reply_to_message_id=message.id)
+      database.remove_id(message.chat.id,id)
+      return
+  print(r.text)
+  print(base)
   data = json.loads(r.text)["data"][0]
-
+  reports = "Unavailable"
+  
   try:
     name = data["name"]
   except:
@@ -492,6 +514,7 @@ async def truth(client, message):
       spamType = "Unavailable"
     try:
       spamStats = spam["spamStats"]
+
       try:
         reports = spamStats["numReports"]
       except:
@@ -532,14 +555,16 @@ async def truth(client, message):
               spamCountries.append(i["countryCode"])
 
     except:
-      spamType = None
+      spamStats = None
+      
 
   except:
     isSPAM = False
   text = "\ud83d\udd0d **Truecaller says:**\n\n"
   if isSPAM:
     text += "⚠️ **Spammer alert!!!**"
-    if not reports == 'Unavailable':
+    if spamStats:
+     if not reports == 'Unavailable':
       text += f"\n⚠️ `{reports}` __users reported this number as SPAM__"
     text += "\n\n"
 
@@ -568,16 +593,18 @@ async def truth(client, message):
   if isSPAM:
     text += "**Spam info:**\n"
     text += f"  - **Spam Type :** `{spamType}`\n"
-    text += f"  - **Spammer Type :** `{spammerType}`\n"
-    text += "  - **Stats :**\n"
-    text += f"        - **reports :** `{reports}`\n"
-    text += f"        - **look-ups :** `{searches}`\n"
-    if calls:
+    if spamStats:
+     text += f"  - **Spammer Type :** `{spammerType}`\n"
+     text += "  - **Stats :**\n"
+     if not reports == 'Unavailable':
+      text += f"        - **reports :** `{reports}`\n"
+     text += f"        - **look-ups :** `{searches}`\n"
+     if calls:
       text += f"        - **calls made:** `{calls}`\n"
-    if pick_rate:
+     if pick_rate:
       text += f"        - **Pick-up rate:** `{pick_rate}%`\n"
 
-    if spamCountries:
+     if spamCountries:
       text += f"  - **Top countries:** `{','.join(spamCountries)}`\n"
   if email:
     text += f"**Email  :** `{email}`\n"
@@ -589,8 +616,12 @@ async def truth(client, message):
   database.add_usage(message.chat.id)
 
 
- except:
-   await message.reply("Something went wrong, Contact support")
+ except Exception as e:
+   print(e)
+   await message.reply("Something went wrong, Contact support @ostrichdiscussion",reply_markup=InlineKeyboardMarkup( [[
+                          InlineKeyboardButton("Support Group", url="https://t.me/ostrichdiscussion")
+                        ]]
+      ) )
 
 @ostrich.on_message(filters.command(["broadcast"]))
 async def broadcast(client, message):
@@ -620,7 +651,7 @@ async def broadcast(client, message):
 
  
 @ostrich.on_message()
-async def mesm(client, message):
+async def on_message(client, message):
   await message.reply(
     "Send me any number in international format (with no space) to search.\n\n**Ex:** `+911234567890`"
   )

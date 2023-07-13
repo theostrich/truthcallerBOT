@@ -125,9 +125,10 @@ def getID(user):
     for i in acc:
       if i["status"] == "active":
          return i['installationID']
+    return random.choice(acc)['installationID']
   else:
     consumed = get_consumed(user)
-    if not consumed > 1:
+    if not consumed > 0:
       return get_id_from_pool()
     return None
     
@@ -164,10 +165,29 @@ def get_consumed(user):
   if not r["requests"]["today"] == today():
     return 0
   return r['requests']['consumed']
-   
-def get_id_from_pool():
+
+def get_pool():
   col = db["defaults"]
   defaults = col.find_one({})
-  installationID = random.choice(defaults["idPool"])
-  return installationID
+  installationIDs = defaults["idPool"]
+  return installationIDs
   
+def get_id_from_pool():
+  installationIDs = get_pool()
+  installationID = random.choice(installationIDs)
+  return installationID
+
+def remove_id(user,id):
+   acc = getAccounts(user)
+   if acc:
+     for i in range(len(acc)):
+       if acc[i]["installationID"] == id:
+         rm_account(user,i)
+   installationIDs = get_pool()
+   collection = db["defaults"]
+   for i in range(len(installationIDs)):
+     installationID = installationIDs[i]
+     if id == installationID:
+           collection.update_one({}, {"$unset": {f'idPool.{i}': 1}})
+           collection.update_one({}, {"$pull": {'idPool': None}})
+
