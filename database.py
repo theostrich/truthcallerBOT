@@ -162,6 +162,7 @@ def add_usage(user):
 def get_consumed(user):
   collection = db["usercache"]
   r = collection.find_one( {'user_info.id': user})
+  print(user)
   if not r["requests"]["today"] == today():
     return 0
   return r['requests']['consumed']

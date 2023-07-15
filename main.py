@@ -10,6 +10,10 @@ from threading import Thread
 from config import apiID, apiHASH, botTOKEN, truecallerAPI
 import math
 import time 
+import logging
+
+logging.basicConfig(level=logging.WARNING)
+logger = logging.getLogger(__name__)
 
 base = truecallerAPI
 ostrich = Client("bot", api_id=apiID, api_hash=apiHASH, bot_token=botTOKEN)
@@ -264,14 +268,19 @@ async def new_acc(client, message):
   if (status == 1 or status == 9):
     process_completed = False
     text = "Send me the 6 digit otp code sent to your mobile number\nOTP is valid for 5 minutes."
-    while not process_completed:
+    retries = 0
+    while (not process_completed):
+      if  retries > 4:
+        await message.reply("Retries limit reached. Try again after 5 minutes.")
+        break
       otp = await message.chat.ask(text, reply_to_message_id=ask_phone.id, 
       reply_markup=ForceReply())
 
       data2 = {"number": phone, "json_data": json_data, "otp": otp.text}
       print(process_completed)
       process_completed = await verify_otp(message, data2,json_data,phone,otp)
-      text = "**ERROR:**\n WRONG OR INVALID OTP. SEND ME THE OTP AGAIN."
+      text = "**ERROR:**\nWRONG OR INVALID OTP.\n\nSEND ME THE OTP AGAIN."
+      retries += 1
   
   elif (status == 6 or status == 5):
     await message.reply(
@@ -302,7 +311,7 @@ async def verify_otp(message, data2,json_data,phone,otp):
   tatus = res['status']
   if (tatus == 2):
     if (res['suspended']):
-      await message.reply("**ERROR:** THIS TRUECALLER ACCOUNT IS SUSPENDED\n\nUse some other mobile number to login.",
+      await message.reply("**ERROR:**\nTHIS TRUECALLER ACCOUNT IS SUSPENDED\nUse some other mobile number to login.",
                           reply_to_message_id=message.id,reply_markup=InlineKeyboardMarkup(
         [[InlineKeyboardButton("Login", callback_data="login")]]))
       process_completed = True
@@ -324,7 +333,7 @@ async def verify_otp(message, data2,json_data,phone,otp):
   elif (tatus == 11):
     print("Invalid otp")
   elif (tatus == 7):
-    await message.reply("**ERROR:**\n RETRIES LIMIT EXCEED.\n\nYou can login again later.", reply_to_message_id=otp.id)
+    await message.reply("**ERROR:**\nRETRIES LIMIT EXCEED.\n\nYou can login again later.", reply_to_message_id=otp.id)
     process_completed = True
   else:
     await message.reply(
@@ -617,7 +626,7 @@ async def truth(client, message):
 
 
  except Exception as e:
-   print(e)
+   logger.exception(e)
    await message.reply("Something went wrong, Contact support @ostrichdiscussion",reply_markup=InlineKeyboardMarkup( [[
                           InlineKeyboardButton("Support Group", url="https://t.me/ostrichdiscussion")
                         ]]
