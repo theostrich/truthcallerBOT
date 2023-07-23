@@ -1,16 +1,16 @@
 import json
 from pyrogram import Client, filters
 import database
-from alive import run
 import requests
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
 from pyrogram.enums import MessageEntityType
 import pyromod.listen
 from threading import Thread
-from config import apiID, apiHASH, botTOKEN, truecallerAPI
+from config import apiID, apiHASH, botTOKEN, truecallerAPI, port
 import math
-import time 
+import time
 import logging
+from alive import app
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -18,12 +18,14 @@ logger = logging.getLogger(__name__)
 base = truecallerAPI
 ostrich = Client("bot", api_id=apiID, api_hash=apiHASH, bot_token=botTOKEN)
 
+
 async def ph_match(_, __, m):
   number = get_text_number(m)
   if number:
-      return True
+    return True
   return False
-  
+
+
 phone_filter = filters.create(ph_match)
 
 
@@ -95,11 +97,11 @@ Send any mobile number in international format with spaces to search.
 def get_text_number(message):
   number = None
   if message.entities:
-   for entity in message.entities:
-    if entity.type == MessageEntityType.PHONE_NUMBER:
-      number = message.text[entity.offset:entity.offset + entity.length].replace(
-        " ", "")
-      break
+    for entity in message.entities:
+      if entity.type == MessageEntityType.PHONE_NUMBER:
+        number = message.text[entity.offset:entity.offset +
+                              entity.length].replace(" ", "")
+        break
   return number
 
 
@@ -213,7 +215,8 @@ async def new_acc(client, message):
   d = database.getAccounts(message.from_user.id)
   ask_phone = await message.chat.ask(
     "Please send your mobile number in international format (with no space).\n\n**Ex:** `+911234567890`",
-    reply_to_message_id=message.id,reply_markup=ForceReply())
+    reply_to_message_id=message.id,
+    reply_markup=ForceReply())
 
   try:
     phone = get_text_number(ask_phone)
@@ -241,8 +244,8 @@ async def new_acc(client, message):
   if d:
     for i in range(len(d)):
       acc = d[i]
-      if phone ==  acc["phone_number"]:
-        database.rm_account( message.chat.id, i)
+      if phone == acc["phone_number"]:
+        database.rm_account(message.chat.id, i)
 
   data1 = {"number": phone}
 
@@ -270,18 +273,21 @@ async def new_acc(client, message):
     text = "Send me the 6 digit otp code sent to your mobile number\nOTP is valid for 5 minutes."
     retries = 0
     while (not process_completed):
-      if  retries > 4:
-        await message.reply("Retries limit reached. Try again after 5 minutes.")
+      if retries > 4:
+        await message.reply("Retries limit reached. Try again after 5 minutes."
+                            )
         break
-      otp = await message.chat.ask(text, reply_to_message_id=ask_phone.id, 
-      reply_markup=ForceReply())
+      otp = await message.chat.ask(text,
+                                   reply_to_message_id=ask_phone.id,
+                                   reply_markup=ForceReply())
 
       data2 = {"number": phone, "json_data": json_data, "otp": otp.text}
       print(process_completed)
-      process_completed = await verify_otp(message, data2,json_data,phone,otp)
+      process_completed = await verify_otp(message, data2, json_data, phone,
+                                           otp)
       text = "**ERROR:**\nWRONG OR INVALID OTP.\n\nSEND ME THE OTP AGAIN."
       retries += 1
-  
+
   elif (status == 6 or status == 5):
     await message.reply(
       "**ERROR:**\nVERIFICATION ATTEMPTS EXCEEDED. TRY AGAIN LATER.",
@@ -295,7 +301,7 @@ async def new_acc(client, message):
     return
 
 
-async def verify_otp(message, data2,json_data,phone,otp):
+async def verify_otp(message, data2, json_data, phone, otp):
   process_completed = False
   r2 = requests.post(base + "loginOTP", json=data2)
   try:
@@ -307,13 +313,15 @@ async def verify_otp(message, data2,json_data,phone,otp):
         [[InlineKeyboardButton("Get Help", url="t.me/ostrichdiscussion")]]),
       reply_to_message_id=message.id)
     process_completed = True
-    return process_completed 
+    return process_completed
   tatus = res['status']
   if (tatus == 2):
     if (res['suspended']):
-      await message.reply("**ERROR:**\nTHIS TRUECALLER ACCOUNT IS SUSPENDED\nUse some other mobile number to login.",
-                          reply_to_message_id=message.id,reply_markup=InlineKeyboardMarkup(
-        [[InlineKeyboardButton("Login", callback_data="login")]]))
+      await message.reply(
+        "**ERROR:**\nTHIS TRUECALLER ACCOUNT IS SUSPENDED\nUse some other mobile number to login.",
+        reply_to_message_id=message.id,
+        reply_markup=InlineKeyboardMarkup(
+          [[InlineKeyboardButton("Login", callback_data="login")]]))
       process_completed = True
       return process_completed
     database.inactive_current(message.chat.id)
@@ -333,12 +341,15 @@ async def verify_otp(message, data2,json_data,phone,otp):
   elif (tatus == 11):
     print("Invalid otp")
   elif (tatus == 7):
-    await message.reply("**ERROR:**\nRETRIES LIMIT EXCEED.\n\nYou can login again later.", reply_to_message_id=otp.id)
+    await message.reply(
+      "**ERROR:**\nRETRIES LIMIT EXCEED.\n\nYou can login again later.",
+      reply_to_message_id=otp.id)
     process_completed = True
   else:
     await message.reply(
       "**ERROR:**\nUNKNOWN RESPONSE CONTACT SUPPORT @ostrichdiscussion",
-      reply_to_message_id=otp.id, reply_markup=InlineKeyboardMarkup(
+      reply_to_message_id=otp.id,
+      reply_markup=InlineKeyboardMarkup(
         [[InlineKeyboardButton("Get Help", url="t.me/ostrichdiscussion")]]))
     process_completed = True
 
@@ -384,288 +395,293 @@ async def notjoined(client, user):
 
 @ostrich.on_message(phone_filter)
 async def truth(client, message):
- try:
-  consumed = database.get_consumed(message.chat.id)
-  if consumed > 2 and await notjoined(client, message.chat.id):
-    await message.reply_text(
-      text="**To make more requests, join the channel and try again.**",
-      reply_markup=InlineKeyboardMarkup([[
-        InlineKeyboardButton(text="Join theostrich",
-                             url="https://t.me/theostrich")
-      ]]))
-    return
+  try:
+    consumed = database.get_consumed(message.chat.id)
+    if consumed > 2 and await notjoined(client, message.chat.id):
+      await message.reply_text(
+        text="**To make more requests, join the channel and try again.**",
+        reply_markup=InlineKeyboardMarkup([[
+          InlineKeyboardButton(text="Join theostrich",
+                               url="https://t.me/theostrich")
+        ]]))
+      return
 
-  phone = get_text_number(message).replace(" ", "")
-  if not phone.startswith("+"):
-    await message.reply(
-      "Invalid phone number. Please enter your number in international format (with no space).\n\n**Ex:** `+911234567890`")
-    return
-
-  id = database.getID(message.from_user.id)
-
-  if not id:
-    await message.reply("Please /login to continue searching.",
-                        reply_markup=InlineKeyboardMarkup([[
-                          InlineKeyboardButton("Login", callback_data="login")
-                        ]]),
-                        reply_to_message_id=message.id)
-    return
-  data = {
-    "number": phone,
-    "installationID": id,
-  }
-  print(data)
-  requests.get(base)
-  r = requests.post(base + "truth", json=data)
-
-  if "status" in json.loads(r.text):
-    if (json.loads(r.text)["status"] == 429):
+    phone = get_text_number(message).replace(" ", "")
+    if not phone.startswith("+"):
       await message.reply(
-        "Too many requests, Try again later or use other account")
+        "Invalid phone number. Please enter your number in international format (with no space).\n\n**Ex:** `+911234567890`"
+      )
       return
-    if (json.loads(r.text)['status'] == 401):
-      await message.reply( "**Error:** Unauthorised.\n\nThis happens if you logged in some other app. You can login again to continue searching. ",reply_markup=InlineKeyboardMarkup( [[
-                          InlineKeyboardButton("Login", callback_data="login")
-                        ]]
-      ) ,reply_to_message_id=message.id)
-      database.remove_id(message.chat.id,id)
+
+    id = database.getID(message.from_user.id)
+
+    if not id:
+      await message.reply("Please /login to continue searching.",
+                          reply_markup=InlineKeyboardMarkup([[
+                            InlineKeyboardButton("Login",
+                                                 callback_data="login")
+                          ]]),
+                          reply_to_message_id=message.id)
       return
-    if (json.loads(r.text)['status'] == 426):
-      print("426 user")
-      await message.reply( "**Error:** Unauthorised.\n\nUse some other number to login. ",reply_markup=InlineKeyboardMarkup( [[
-                          InlineKeyboardButton("Login", callback_data="login")
-                        ]]
-      ) ,reply_to_message_id=message.id)
-      database.remove_id(message.chat.id,id)
-      return
-  print(r.text)
-  print(base)
-  data = json.loads(r.text)["data"][0]
-  reports = "Unavailable"
-  
-  try:
-    name = data["name"]
-  except:
-    name = "Unavailable"
-  try:
-    about = data["about"]
-  except:
-    about = None
-  try:
-    companyName = data["companyName"]
-  except:
-    companyName = None
-  try:
-    type = data["phones"][0]["numberType"]
-  except:
-    type = "Unavailable"
-  try:
-    carrier = data["phones"][0]["carrier"]
-    if carrier == '':
+    data = {
+      "number": phone,
+      "installationID": id,
+    }
+    print(data)
+    requests.get(base)
+    r = requests.post(base + "truth", json=data)
+
+    if "status" in json.loads(r.text):
+      if (json.loads(r.text)["status"] == 429):
+        await message.reply(
+          "Too many requests, Try again later or use other account")
+        return
+      if (json.loads(r.text)['status'] == 401):
+        await message.reply(
+          "**Error:** Unauthorised.\n\nThis happens if you logged in some other app. You can login again to continue searching. ",
+          reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("Login", callback_data="login")]]),
+          reply_to_message_id=message.id)
+        database.remove_id(message.chat.id, id)
+        return
+      if (json.loads(r.text)['status'] == 426):
+        print("426 user")
+        await message.reply(
+          "**Error:** VERIFICATION REQUIRED.\n\nIf you are seeing this error, please login to official [TrueCaller app](https://play.google.com/store/apps/details?id=com.truecaller&rdid=com.truecaller) and solve captcha and login again in bot to continue.\n\nIf you face any issues contact support @ostrichdiscussion",
+          reply_markup=InlineKeyboardMarkup(
+            [[
+          InlineKeyboardButton(text="Get Help",
+                               url="https://t.me/ostrichdiscussion")
+        ]]),
+          reply_to_message_id=message.id)
+        database.remove_id(message.chat.id, id)
+        return
+    print(r.text)
+    print(base)
+    data = json.loads(r.text)["data"][0]
+    reports = "Unavailable"
+
+    try:
+      name = data["name"]
+    except:
+      name = "Unavailable"
+    try:
+      about = data["about"]
+    except:
+      about = None
+    try:
+      companyName = data["companyName"]
+    except:
+      companyName = None
+    try:
+      type = data["phones"][0]["numberType"]
+    except:
+      type = "Unavailable"
+    try:
+      carrier = data["phones"][0]["carrier"]
+      if carrier == '':
+        carrier = "Unavailable"
+    except:
       carrier = "Unavailable"
-  except:
-    carrier = "Unavailable"
 
-  try:
-    address = data["addresses"][0]["address"]
-  except:
-    address = None
-
-  try:
-    street = data["addresses"][0]["street"]
-  except:
-    street = None
-  email = None
-  website = None
-  if data["internetAddresses"]:
-    if not len(data["internetAddresses"]) == 0:
-      for i in data["internetAddresses"]:
-        if i["service"] == "email":
-          email = i["id"]
-        if i["service"] == "link":
-          website = i["id"]
-
-  try:
-    zipCode = data["addresses"][0]["zipCode"]
-  except:
-    zipCode = None
-
-  try:
-    city = data["addresses"][0]["city"]
-  except:
-    city = None
-
-  try:
-    countryCode = data["addresses"][0]["countryCode"]
     try:
-      countryData = json.loads(open('countries.json', "r").read())
-      country = countryData[countryCode]["name"]
+      address = data["addresses"][0]["address"]
     except:
-      country = countryCode
-  except:
-    country = "Unavailable"
+      address = None
 
-  try:
-    tzone = data["addresses"][0]["timeZone"]
-  except:
-    tzone = "Unavailable"
-
-  try:
-    spam = data["spamInfo"]
-    isSPAM = True
     try:
-      spamType = spam["spamType"]
+      street = data["addresses"][0]["street"]
     except:
-      spamType = "Unavailable"
+      street = None
+    email = None
+    website = None
+    if data["internetAddresses"]:
+      if not len(data["internetAddresses"]) == 0:
+        for i in data["internetAddresses"]:
+          if i["service"] == "email":
+            email = i["id"]
+          if i["service"] == "link":
+            website = i["id"]
+
     try:
-      spamType = spam["spamType"]
+      zipCode = data["addresses"][0]["zipCode"]
     except:
-      spamType = "Unavailable"
+      zipCode = None
+
     try:
-      spamStats = spam["spamStats"]
+      city = data["addresses"][0]["city"]
+    except:
+      city = None
 
+    try:
+      countryCode = data["addresses"][0]["countryCode"]
       try:
-        reports = spamStats["numReports"]
+        countryData = json.loads(open('countries.json', "r").read())
+        country = countryData[countryCode]["name"]
       except:
-        reports = "Unavailable"
-      try:
-        calls = spamStats["numCalls60days"]
-      except:
-        calls = None
-      try:
-        callsAns = spamStats["numCallsAnswered"]
-      except:
-        callsAns = None
-    #  try:
-    #  callsUnans = spamStats["numCallsNotAnswered"]
-    #  except:
-    #    callsUnans = None
-      pick_rate = None
-      if callsAns and calls:
-        pick_rate = math.ceil((callsAns / calls) * 100)
+        country = countryCode
+    except:
+      country = "Unavailable"
 
+    try:
+      tzone = data["addresses"][0]["timeZone"]
+    except:
+      tzone = "Unavailable"
+
+    try:
+      spam = data["spamInfo"]
+      isSPAM = True
       try:
-        searches = spamStats["numSearches60days"]
+        spamType = spam["spamType"]
       except:
-        searches = "Unavailable"
+        spamType = "Unavailable"
       try:
-        spammerType = spamStats["spammerType"]
+        spamType = spam["spamType"]
       except:
-        spammerType = "Unavailable"
-      spamCountries = []
-      if spamStats["topSpammedCountries"]:
-        for i in spamStats["topSpammedCountries"]:
-          if i["countryCode"]:
-            try:
-              countryData = json.loads(open('countries.json', "r").read())
-              country = countryData[i["countryCode"]]["name"]
-              spamCountries.append(country)
-            except:
-              spamCountries.append(i["countryCode"])
+        spamType = "Unavailable"
+      try:
+        spamStats = spam["spamStats"]
+
+        try:
+          reports = spamStats["numReports"]
+        except:
+          reports = "Unavailable"
+        try:
+          calls = spamStats["numCalls60days"]
+        except:
+          calls = None
+        try:
+          callsAns = spamStats["numCallsAnswered"]
+        except:
+          callsAns = None
+      #  try:
+      #  callsUnans = spamStats["numCallsNotAnswered"]
+      #  except:
+      #    callsUnans = None
+        pick_rate = None
+        if callsAns and calls:
+          pick_rate = math.ceil((callsAns / calls) * 100)
+
+        try:
+          searches = spamStats["numSearches60days"]
+        except:
+          searches = "Unavailable"
+        try:
+          spammerType = spamStats["spammerType"]
+        except:
+          spammerType = "Unavailable"
+        spamCountries = []
+        if spamStats["topSpammedCountries"]:
+          for i in spamStats["topSpammedCountries"]:
+            if i["countryCode"]:
+              try:
+                countryData = json.loads(open('countries.json', "r").read())
+                country = countryData[i["countryCode"]]["name"]
+                spamCountries.append(country)
+              except:
+                spamCountries.append(i["countryCode"])
+
+      except:
+        spamStats = None
 
     except:
-      spamStats = None
-      
+      isSPAM = False
+    text = "\ud83d\udd0d **Truecaller says:**\n\n"
+    if isSPAM:
+      text += "⚠️ **Spammer alert!!!**"
+      if spamStats:
+        if not reports == 'Unavailable':
+          text += f"\n⚠️ `{reports}` __users reported this number as SPAM__"
+      text += "\n\n"
 
-  except:
-    isSPAM = False
-  text = "\ud83d\udd0d **Truecaller says:**\n\n"
-  if isSPAM:
-    text += "⚠️ **Spammer alert!!!**"
-    if spamStats:
-     if not reports == 'Unavailable':
-      text += f"\n⚠️ `{reports}` __users reported this number as SPAM__"
-    text += "\n\n"
+    text += f"**Name  :** `{name}`\n"
+    if companyName:
+      text += f"**Company Name  :** `{companyName}`\n"
+    if about:
+      text += f"**About  :** `{about}`\n"
 
-  text += f"**Name  :** `{name}`\n"
-  if companyName:
-    text += f"**Company Name  :** `{companyName}`\n"
-  if about:
-    text += f"**About  :** `{about}`\n"
+    companyName
+    text += f"**Phone :** `{phone}`\n"
+    text += f"**Type  :** `{type}`\n"
+    text += f"**Carrier :** `{carrier}`\n\n"
+    text += f"**Addresses:**\n"
+    if address:
+      text += f"  - **Address :** `{address}`\n"
+    if street:
+      text += f"  - **Street :** `{street}`\n"
+    if city:
+      text += f"  - **City :** `{city}`\n"
+    text += f"  - **Country :** `{country}`\n"
+    if zipCode:
+      text += f"  - **ZipCode :** `{zipCode}`\n"
 
-  companyName
-  text += f"**Phone :** `{phone}`\n"
-  text += f"**Type  :** `{type}`\n"
-  text += f"**Carrier :** `{carrier}`\n\n"
-  text += f"**Addresses:**\n"
-  if address:
-    text += f"  - **Address :** `{address}`\n"
-  if street:
-    text += f"  - **Street :** `{street}`\n"
-  if city:
-    text += f"  - **City :** `{city}`\n"
-  text += f"  - **Country :** `{country}`\n"
-  if zipCode:
-    text += f"  - **ZipCode :** `{zipCode}`\n"
+    text += f"  - **Timezone :** `{tzone}`\n\n"
+    if isSPAM:
+      text += "**Spam info:**\n"
+      text += f"  - **Spam Type :** `{spamType}`\n"
+      if spamStats:
+        text += f"  - **Spammer Type :** `{spammerType}`\n"
+        text += "  - **Stats :**\n"
+        if not reports == 'Unavailable':
+          text += f"        - **reports :** `{reports}`\n"
+        text += f"        - **look-ups :** `{searches}`\n"
+        if calls:
+          text += f"        - **calls made:** `{calls}`\n"
+        if pick_rate:
+          text += f"        - **Pick-up rate:** `{pick_rate}%`\n"
 
-  text += f"  - **Timezone :** `{tzone}`\n\n"
-  if isSPAM:
-    text += "**Spam info:**\n"
-    text += f"  - **Spam Type :** `{spamType}`\n"
-    if spamStats:
-     text += f"  - **Spammer Type :** `{spammerType}`\n"
-     text += "  - **Stats :**\n"
-     if not reports == 'Unavailable':
-      text += f"        - **reports :** `{reports}`\n"
-     text += f"        - **look-ups :** `{searches}`\n"
-     if calls:
-      text += f"        - **calls made:** `{calls}`\n"
-     if pick_rate:
-      text += f"        - **Pick-up rate:** `{pick_rate}%`\n"
+        if spamCountries:
+          text += f"  - **Top countries:** `{','.join(spamCountries)}`\n"
+    if email:
+      text += f"**Email  :** `{email}`\n"
+    if website:
+      text += f"**Website  :** `{website}`\n"
 
-     if spamCountries:
-      text += f"  - **Top countries:** `{','.join(spamCountries)}`\n"
-  if email:
-    text += f"**Email  :** `{email}`\n"
-  if website:
-    text += f"**Website  :** `{website}`\n"
+    await message.reply(text, disable_web_page_preview=True)
+    database.statial("search", 1)
+    database.add_usage(message.chat.id)
 
-  await message.reply(text, disable_web_page_preview=True)
-  database.statial("search", 1)
-  database.add_usage(message.chat.id)
+  except Exception as e:
+    logger.exception(e)
+    await message.reply(
+      "Something went wrong, Contact support @ostrichdiscussion",
+      reply_markup=InlineKeyboardMarkup([[
+        InlineKeyboardButton("Support Group",
+                             url="https://t.me/ostrichdiscussion")
+      ]]))
 
-
- except Exception as e:
-   logger.exception(e)
-   await message.reply("Something went wrong, Contact support @ostrichdiscussion",reply_markup=InlineKeyboardMarkup( [[
-                          InlineKeyboardButton("Support Group", url="https://t.me/ostrichdiscussion")
-                        ]]
-      ) )
 
 @ostrich.on_message(filters.command(["broadcast"]))
 async def broadcast(client, message):
-    chat_id = message.chat.id
-    botOwnerID = [1775541139, 1520625615]
-    if chat_id in botOwnerID:
-        await message.reply_text("Broadcasting...")
-        collection = database.db["usercache"]
-        chat = collection.find({})
-        chats = [sub['user_info']['id'] for sub in chat]
-        failed = 0
-        for chat in chats:
-            try:
-                await message.reply_to_message.forward(chat)
-                print("broadcasting")
-                time.sleep(2)
-            except:
-                failed += 1
-                print("Couldn't send broadcast to %s, group name %s", chat)
-        await message.reply_text(
-            "Broadcast complete. {} users failed to receive the message, probably due to being kicked."
-            .format(failed))
-    else:
-        await client.send_message(
-            1520625615, f"Someone tried to access broadcast command,{chat_id}")
+  chat_id = message.chat.id
+  botOwnerID = [1775541139, 1520625615]
+  if chat_id in botOwnerID:
+    await message.reply_text("Broadcasting...")
+    collection = database.db["usercache"]
+    chat = collection.find({})
+    chats = [sub['user_info']['id'] for sub in chat]
+    failed = 0
+    for chat in chats:
+      try:
+        await message.reply_to_message.forward(chat)
+        print("broadcasting")
+        time.sleep(2)
+      except:
+        failed += 1
+        print("Couldn't send broadcast to %s, group name %s", chat)
+    await message.reply_text(
+      "Broadcast complete. {} users failed to receive the message, probably due to being kicked."
+      .format(failed))
+  else:
+    await client.send_message(
+      1520625615, f"Someone tried to access broadcast command,{chat_id}")
 
 
- 
 @ostrich.on_message()
 async def on_message(client, message):
   await message.reply(
     "Send me any number in international format (with no space) to search.\n\n**Ex:** `+911234567890`"
   )
 
-
-server = Thread(target=run)
-server.start()
-ostrich.run()
+ostrich.start()
+app.run("0.0.0.0", port, loop=ostrich.loop, use_reloader=False)

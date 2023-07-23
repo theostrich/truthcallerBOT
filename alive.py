@@ -1,12 +1,9 @@
-from flask import Flask
+from quart import Quart
 
-app = Flask('')
+app = Quart('')
 app.config['MONGODB_CONNECT'] = False
 
 
 @app.route('/')
 def main():
   return "Your bot is alive!"
-
-def run():
-  app.run(host="0.0.0.0", port=8080)

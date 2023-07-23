@@ -10,7 +10,7 @@ if ENV:
     apiHASH = os.environ.get('apiHASH', None)
     botTOKEN = os.environ.get('botTOKEN', None)
     truecallerAPI = os.environ.get('apiBaseURL', None)
-  
+    port = int(os.environ.get("PORT", 5000))  
     mongouri = os.environ.get("mongouri", "")
     database = os.environ.get("database", "TruthCaller")
     user_collection = os.environ.get('userCollection', "users")
@@ -27,7 +27,7 @@ elif os.path.isfile(secrets_path):
     botTOKEN = yaml_content['telegram'][2]['botTOKEN']
 
     truecallerAPI = yaml_content['truecaller'][0]['apiEndPoint']
-
+    port = int(os.environ.get("PORT", 5000))  
 
     mongouri = yaml_content['MongoDB'][0]['URI']
     database = yaml_content['MongoDB'][1]["database"]
